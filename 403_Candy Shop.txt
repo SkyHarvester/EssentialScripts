@@ -1,0 +1,140 @@
+#===============================================================================
+# Pokemon Essentials - Candy Shop
+# Scripted by SkyHarvester
+#===============================================================================
+class SweetBerryMartAdapter < PokemonMartAdapter
+  def getMoney
+    return $bag.quantity(:SWEETBERRY)
+  end
+
+  def getMoneyString
+    return _INTL("{1}", getMoney)
+  end
+
+  def setMoney(value)
+    current_qty = getMoney
+    diff = value - current_qty
+    if diff > 0
+      $bag.add(:SWEETBERRY, diff)
+    elsif diff < 0
+      $bag.remove(:SWEETBERRY, -diff)
+    end
+  end
+
+  def getPrice(item, selling = false)
+    return GameData::Item.get(item).price if !selling
+    return GameData::Item.get(item).sell_price
+  end
+
+  def getDisplayPrice(item, selling = false)
+    price = getPrice(item, selling).to_s_formatted
+    return _INTL("{1}", price)
+  end
+
+  def canSell?(item)
+    return false
+  end
+end
+
+#===============================================================================
+# Candy Shop
+#===============================================================================
+class CandyShop_Scene < PokemonMart_Scene
+  def pbRefresh
+    if @subscene
+      @subscene.pbRefresh
+    else
+      itemwindow = @sprites["itemwindow"]
+      @sprites["icon"].item = itemwindow.item
+      @sprites["itemtextwindow"].text = (itemwindow.item) ? @adapter.getDescription(itemwindow.item) : _INTL("Quit shopping.")
+      @sprites["qtywindow"].visible = !itemwindow.item.nil?
+      @sprites["qtywindow"].text = _INTL("In Bag:<r>{1}", @adapter.getQuantity(itemwindow.item))
+      @sprites["qtywindow"].y = Graphics.height - 102 - @sprites["qtywindow"].height
+      itemwindow.refresh
+    end
+    @sprites["moneywindow"].text = _INTL("Sweet Berries:\n<r>{1}", @adapter.getMoneyString)
+  end
+end
+
+class CandyShopScreen < PokemonMartScreen
+  def initialize(scene, stock)
+    @scene = scene
+    @stock = stock
+    @adapter = SweetBerryMartAdapter.new
+  end
+
+  def pbBuyScreen
+    @scene.pbStartBuyScene(@stock, @adapter)
+    item = nil
+    loop do
+      item = @scene.pbChooseBuyItem
+      break if !item
+      quantity = 0
+      itemname = @adapter.getName(item)
+      itemnameplural = @adapter.getNamePlural(item)
+      price = @adapter.getPrice(item)
+      if @adapter.getMoney < price
+        pbDisplayPaused(_INTL("You don't have enough Sweet Berries."))
+        next
+      end
+      if GameData::Item.get(item).is_important?
+        next if !pbConfirm(_INTL("So you want the {1}?\nIt'll be {2} Sweet Berries. All right?", itemname, price))
+        quantity = 1
+      else
+        maxafford = (price <= 0) ? Settings::BAG_MAX_PER_SLOT : @adapter.getMoney / price
+        maxafford = Settings::BAG_MAX_PER_SLOT if maxafford > Settings::BAG_MAX_PER_SLOT
+        quantity = @scene.pbChooseNumber(_INTL("So how many {1}?", itemnameplural), item, maxafford)
+        next if quantity == 0
+        price *= quantity
+        if quantity > 1
+          next if !pbConfirm(_INTL("So you want {1} {2}?\nThey'll be {3} Sweet Berries. All right?", quantity, itemnameplural, price))
+        elsif quantity > 0
+          next if !pbConfirm(_INTL("So you want {1} {2}?\nIt'll be {3} Sweet Berries. All right?", quantity, itemname, price))
+        end
+      end
+      if @adapter.getMoney < price
+        pbDisplayPaused(_INTL("You don't have enough Sweet Berries."))
+        next
+      end
+      added = 0
+      quantity.times do
+        break if !@adapter.addItem(item)
+        added += 1
+      end
+      if added == quantity
+        @adapter.setMoney(@adapter.getMoney - price)
+        @stock.delete_if { |itm| GameData::Item.get(itm).is_important? && $bag.has?(itm) }
+        pbDisplayPaused(_INTL("Here you are! Thank you!")) { pbSEPlay("Mart buy item") }
+      else
+        added.times do
+          if !@adapter.removeItem(item)
+            raise _INTL("Failed to delete stored items")
+          end
+        end
+        pbDisplayPaused(_INTL("You have no room in your Bag."))
+      end
+    end
+    @scene.pbEndBuyScene
+  end
+end
+
+def pbCandyShop(stock, speech = nil)
+  stock.delete_if { |item| GameData::Item.get(item).is_important? && $bag.has?(item) }
+  commands = []
+  cmdBuy  = -1
+  cmdQuit = -1
+  commands[cmdBuy = commands.length]  = _INTL("Exchange Sweet Berries")
+  commands[cmdQuit = commands.length] = _INTL("No, thanks")
+  cmd = pbMessage(speech || _INTL("Welcome to the Candy Shop! How may I help you?"), commands, cmdQuit + 1)
+  loop do
+    if cmdBuy >= 0 && cmd == cmdBuy
+      scene = CandyShop_Scene.new
+      screen = CandyShopScreen.new(scene, stock)
+      screen.pbBuyScreen
+    else
+      pbMessage(_INTL("Do come again!"))
+      break
+    end
+    cmd = pbMessage(_INTL("Is there anything else I can do for you?"), commands, cmdQuit + 1)
+  end
+end

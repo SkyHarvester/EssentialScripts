@@ -1,0 +1,22 @@
+module ScriptExtractor
+  OUTPUT_DIR = "D:/RPG Maker XP/Pokémon Indigo Stories/Extracted Scripts" # Update this path if needed
+
+  def self.extract_scripts
+    scripts = load_data("Data/Scripts.rxdata")
+    Dir.mkdir(OUTPUT_DIR) unless Dir.exist?(OUTPUT_DIR)
+
+    scripts.each_with_index do |script, index|
+      script_name = script[1].encode('UTF-8', 'UTF-8', invalid: :replace, undef: :replace, replace: '_')
+      script_content = Zlib::Inflate.inflate(script[2]).encode('UTF-8', 'UTF-8', invalid: :replace, undef: :replace, replace: '_')
+
+      File.open("#{OUTPUT_DIR}/#{index + 1}_#{script_name}.txt", "w:UTF-8") do |file|
+        file.write(script_content)
+      end
+    end
+
+    puts "Scripts extracted successfully to #{OUTPUT_DIR}"
+  end
+end
+
+# Call the extract_scripts method when the game starts
+ScriptExtractor.extract_scripts

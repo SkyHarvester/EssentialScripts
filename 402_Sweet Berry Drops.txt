@@ -1,0 +1,31 @@
+#===============================================================================
+# Custom Sweet Berry drop script
+# Scripted by SkyHarvester
+#===============================================================================
+class Battle
+  attr_accessor :found_sweet_berries
+
+  alias original_initialize initialize
+  def initialize(scene, p1, p2, player, opponent)
+    @found_sweet_berries = 0
+    original_initialize(scene, p1, p2, player, opponent)
+  end
+
+  alias original_pbEndOfBattle pbEndOfBattle
+  def pbEndOfBattle
+    if wildBattle? && @decision == 1 && rand < 0.33 # 33% droprate
+      @found_sweet_berries = rand(1..3) # Randomly drop between 1 to 3 Sweet Berries
+    end
+    original_pbEndOfBattle
+    if @found_sweet_berries > 0
+      if $bag.can_add?(:SWEETBERRY, @found_sweet_berries)
+        $bag.add(:SWEETBERRY, @found_sweet_berries)
+        berry_text = @found_sweet_berries > 1 ? "Berries" : "Berry"
+        pbMessage(_INTL("You found #{@found_sweet_berries} Sweet #{berry_text}!"))
+      else
+        berry_text = @found_sweet_berries > 1 ? "Berries" : "Berry"
+        pbMessage(_INTL("You found #{@found_sweet_berries} Sweet #{berry_text}, but your Bag is full!"))
+      end
+    end
+  end
+end
